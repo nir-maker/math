@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="he">
+<head>
+  <meta charset="UTF-8">
+  <title>תוסף לציור גרפים, משולשים ופרבולות</title>
+  <style>
+    /* עיצוב בסיסי */
+    body {
+      direction: rtl;
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      background: #f0f4f7;
+    }
+    header {
+      background: #3f51b5;
+      color: #fff;
+      text-align: center;
+      padding: 1rem;
+      font-size: 1.5rem;
+    }
+    .container {
+      max-width: 800px;
+      margin: 2rem auto;
+      background: #fff;
+      padding: 2rem;
+      border-radius: 8px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+    }
+    .controls {
+      margin-bottom: 1.5rem;
+    }
+    .controls label {
+      font-weight: bold;
+      display: block;
+      margin-bottom: 0.3rem;
+    }
+    .controls input, .controls select {
+      width: 100%;
+      padding: 0.5rem;
+      margin-bottom: 0.5rem;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      box-sizing: border-box;
+    }
+    .controls button {
+      background: #3f51b5;
+      color: #fff;
+      border: none;
+      padding: 0.7rem 1rem;
+      margin-right: 0.5rem;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background 0.3s;
+    }
+    .controls button:hover {
+      background: #2c397f;
+    }
+    canvas {
+      display: block;
+      margin: 0 auto;
+      border: 1px solid #ddd;
+      background: #fafafa;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body>
+
+  <header>תוסף לציור גרפים, משולשים ופרבולות</header>
+
+  <div class="container">
+    <div class="controls">
+      <label for="shapeSelect">בחר סוג ציור:</label>
+      <select id="shapeSelect">
+        <option value="triangle">משולש</option>
+        <option value="parabola">פרבולה</option>
+        <option value="functionGraph">גרף פונקציה</option>
+      </select>
+
+      <div id="parameters">
+        <!-- שדות להזנת פרמטרים -->
+      </div>
+
+      <button id="drawButton">צייר</button>
+      <button id="copyButton">העתק גרף (ללא רקע)</button>
+    </div>
+
+    <canvas id="drawingCanvas" width="600" height="400"></canvas>
+    
+    <p>
+      <strong>גרף פונקציה:</strong> הזינו ביטוי בשפה פשוטה. לדוגמה: <code>sin(x)</code> או <code>x^2</code>.
+    </p>
+  </div>
+
+  <script>
+    // עדכון שדות הפרמטרים לפי הבחירה
+    function updateParameters() {
+      const shape = document.getElementById('shapeSelect').value;
+      const parametersDiv = document.getElementById('parameters');
+      let html = "";
+      if (shape === 'triangle') {
+        html = `
+          <label for="triangleBase">אורך בסיס (פיקסלים):</label>
+          <input type="number" id="triangleBase" value="200">
+          <label for="triangleHeight">גובה (פיקסלים):</label>
+          <input type="number" id="triangleHeight" value="150">
+          <label>
+            <input type="checkbox" id="showAngles" checked> הצג זוויות במשולש
+          </label>
+        `;
+      } else if (shape === 'parabola') {
+        html = `
+          <label for="parabolaA">מקדם a:</label>
+          <input type="number" step="any" id="parabolaA" value="1">
+          <label for="parabolaB">מקדם b:</label>
+          <input type="number" step="any" id="parabolaB" value="0">
+          <label for="parabolaC">מקדם c:</label>
+          <input type="number" step="any" id="parabolaC" value="0">
+        `;
+      } else if (shape === 'functionGraph') {
+        html = `
+          <label for="functionExpression">ביטוי פונקציה (לדוגמה: sin(x) או x^2):</label>
+          <input type="text" id="functionExpression" value="sin(x)">
+        `;
+      }
+      parametersDiv.innerHTML = html;
+    }
+    updateParameters();
+    document.getElementById('shapeSelect').addEventListener('change', updateParameters);
+
+    const scale = 20; // מספר פיקסלים ליחידת מידה
+
+    // הפיכת נקודות ממערכת מתמטית למערכת הקנבס
+    function mathToCanvas(x, y, canvas) {
+      const cx = canvas.width / 2;
+      const cy = canvas.height / 2;
+      return { x: cx + x * scale, y: cy - y * scale };
+    }
+
+    // ציור הצירים (רקע)
+    function drawAxes(ctx, canvas) {
+      const cx = canvas.width / 2;
+      const cy = canvas.height / 2;
+      ctx.strokeStyle = '#aaa';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(0, cy);
+      ctx.lineTo(canvas.width, cy);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(cx, 0);
+      ctx.lineTo(cx, canvas.height);
+      ctx.stroke();
+    }
+
+    // פונקציה לחישוב זווית בודדת בטריפל (בין שני וקטורים)
+    function computeAngle(vertex, p, q) {
+      const v1 = { x: p.x - vertex.x, y: p.y - vertex.y };
+      const v2 = { x: q.x - vertex.x, y: q.y - vertex.y };
+      const dot = v1.x * v2.x + v1.y * v2.y;
+      const mag1 = Math.sqrt(v1.x * v1.x + v1.y * v1.y);
+      const mag2 = Math.sqrt(v2.x * v2.x + v2.y * v2.y);
+      const angleRad = Math.acos(dot / (mag1 * mag2));
+      return angleRad * (180 / Math.PI);
+    }
+
+    // ציור משולש, כולל ציור זוויות אם נבחר
+    function drawTriangle(ctx, canvas, base, height) {
+      const cx = canvas.width / 2;
+      const cy = canvas.height / 2;
+      const halfBase = base / 2;
+      // הגדרת נקודות המשולש
+      const p1 = { x: cx - halfBase, y: cy + height / 2 }; // קודקוד שמאלי
+      const p2 = { x: cx + halfBase, y: cy + height / 2 }; // קודקוד ימני
+      const p3 = { x: cx, y: cy - height / 2 };            // קודקוד עליון
+
+      // ציור המשולש
+      ctx.strokeStyle = '#e91e63';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(p1.x, p1.y);
+      ctx.lineTo(p2.x, p2.y);
+      ctx.lineTo(p3.x, p3.y);
+      ctx.closePath();
+      ctx.stroke();
+
+      // בדיקה: אם נבחר להציג זוויות, מחשבים ומציגים
+      const showAngles = document.getElementById('showAngles') && document.getElementById('showAngles').checked;
+      if (showAngles) {
+        const angleP1 = computeAngle(p1, p2, p3);
+        const angleP2 = computeAngle(p2, p1, p3);
+        const angleP3 = computeAngle(p3, p1, p2);
+        ctx.fillStyle = "#000";
+        ctx.font = "14px Arial";
+        // מיקום טקסט ליד כל קודקוד – ניתן לשנות בהתאם למראה הרצוי
+        ctx.fillText(angleP1.toFixed(0) + "°", p1.x - 40, p1.y + 20);
+        ctx.fillText(angleP2.toFixed(0) + "°", p2.x + 10, p2.y + 20);
+        ctx.fillText(angleP3.toFixed(0) + "°", p3.x - 10, p3.y - 10);
+      }
+    }
+
+    // ציור פרבולה: y = a*x^2 + b*x + c
+    function drawParabola(ctx, canvas, a, b, c) {
+      ctx.strokeStyle = '#3f51b5';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      let first = true;
+      const xStart = -canvas.width / (2 * scale);
+      const xEnd = canvas.width / (2 * scale);
+      const step = (xEnd - xStart) / canvas.width;
+      for (let x = xStart; x <= xEnd; x += step) {
+        const y = a * x * x + b * x + c;
+        const pt = mathToCanvas(x, y, canvas);
+        if (first) {
+          ctx.moveTo(pt.x, pt.y);
+          first = false;
+        } else {
+          ctx.lineTo(pt.x, pt.y);
+        }
+      }
+      ctx.stroke();
+    }
+
+    // פונקציה להמרת ביטוי בשפה פשוטה לביטוי תקני של JavaScript
+    function transformExpression(expr) {
+      let result = expr;
+      result = result.replace(/sin\s*\(/gi, "Math.sin(");
+      result = result.replace(/cos\s*\(/gi, "Math.cos(");
+      result = result.replace(/tan\s*\(/gi, "Math.tan(");
+      result = result.replace(/log\s*\(/gi, "Math.log(");
+      result = result.replace(/sqrt\s*\(/gi, "Math.sqrt(");
+      result = result.replace(/([a-zA-Z0-9\.]+)\s*\^\s*([a-zA-Z0-9\.]+)/g, "Math.pow($1,$2)");
+      return result;
+    }
+
+    // ציור גרף פונקציה
+    function drawFunction(ctx, canvas, expr) {
+      ctx.strokeStyle = '#4caf50';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      let first = true;
+      const xStart = -canvas.width / (2 * scale);
+      const xEnd = canvas.width / (2 * scale);
+      const step = (xEnd - xStart) / canvas.width;
+      const transformedExpr = transformExpression(expr);
+      for (let x = xStart; x <= xEnd; x += step) {
+        let y;
+        try {
+          y = eval(transformedExpr);
+        } catch (e) {
+          alert("ביטוי לא תקין: " + e.message);
+          return;
+        }
+        const pt = mathToCanvas(x, y, canvas);
+        if (first) {
+          ctx.moveTo(pt.x, pt.y);
+          first = false;
+        } else {
+          ctx.lineTo(pt.x, pt.y);
+        }
+      }
+      ctx.stroke();
+    }
+
+    // ציור האובייקט בלבד (ללא הצירים)
+    function drawObjectOnly(ctx, canvas) {
+      const shape = document.getElementById('shapeSelect').value;
+      if (shape === 'triangle') {
+        const base = parseFloat(document.getElementById('triangleBase').value);
+        const height = parseFloat(document.getElementById('triangleHeight').value);
+        drawTriangle(ctx, canvas, base, height);
+      } else if (shape === 'parabola') {
+        const a = parseFloat(document.getElementById('parabolaA').value);
+        const b = parseFloat(document.getElementById('parabolaB').value);
+        const c = parseFloat(document.getElementById('parabolaC').value);
+        drawParabola(ctx, canvas, a, b, c);
+      } else if (shape === 'functionGraph') {
+        const expr = document.getElementById('functionExpression').value;
+        drawFunction(ctx, canvas, expr);
+      }
+    }
+
+    // ציור מלא (כולל צירים) על הקנבס הראשי
+    function drawShape() {
+      const canvas = document.getElementById('drawingCanvas');
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      drawAxes(ctx, canvas);
+      drawObjectOnly(ctx, canvas);
+    }
+    document.getElementById('drawButton').addEventListener('click', drawShape);
+
+    // העתקת הגרף (האובייקט בלבד, ללא צירים) ללוח
+    function copyCanvas() {
+      const mainCanvas = document.getElementById('drawingCanvas');
+      const offCanvas = document.createElement('canvas');
+      offCanvas.width = mainCanvas.width;
+      offCanvas.height = mainCanvas.height;
+      const offCtx = offCanvas.getContext('2d');
+      // ציור האובייקט בלבד על קנבס זמני (רקע שקוף)
+      drawObjectOnly(offCtx, offCanvas);
+      
+      offCanvas.toBlob(blob => {
+        if (!navigator.clipboard) {
+          alert("הדפדפן לא תומך בהעתקה");
+          return;
+        }
+        const item = new ClipboardItem({ [blob.type]: blob });
+        navigator.clipboard.write([item]).then(() => {
+          alert("הגרף הועתק ללא רקע");
+        }).catch(err => {
+          alert("העתקה נכשלה: " + err);
+        });
+      });
+    }
+    document.getElementById('copyButton').addEventListener('click', copyCanvas);
+  </script>
+</body>
+</html>
